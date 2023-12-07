@@ -24,7 +24,8 @@ class Crawler:
     def __init__(self, debug=False, log_errors=False):
         self.urls = pd.DataFrame(
             columns=["website", "ref", "url", "source", "size"])
-        self.formats = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg')
+        self.formats = (
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp')
         self.times = {}
         self.title = ""
         self.soup = ""
@@ -60,6 +61,7 @@ class Crawler:
             except TimeoutException:
                 if self.log_errors:
                     print("Timeout Error", file=sys.stderr)
+                time.sleep(15)
             except NoSuchElementException:
                 if self.log_errors:
                     print("Element not found", file=sys.stderr)
@@ -110,8 +112,6 @@ class Crawler:
         Args:
             tag (Tag): <a> tag object.
         """
-        # alt = tag.get('alt')
-        # url = tag.get('src')
         img_tag = tag.find("img")
         if img_tag:
             alt2 = img_tag.get('alt')
@@ -174,7 +174,7 @@ class Crawler:
         if "data:" in url:
             return True
         try:
-            response = requests.head(
+            response = requests.get(
                 url, allow_redirects=True, timeout=20,
                 headers={
                     "Accept": "*/*",
@@ -203,17 +203,17 @@ class Crawler:
         # Main score
         scoring_criteria = [
             ("logo", 10, "ref"),
-            (self.site_name, 30, "ref"),
+            (self.site_name, 50, "ref"),
             ("logo", 10, "url"),
-            (self.site_name, 15, "url"),
+            ("official", 30, "ref"),
+            (self.site_name, 35, "url"),
             (self.bare_url, 20, "ref"),
             ("icon", 5, "ref"),
             ("main", 2, "url"),
             ("alt", 1, "source"),
             ("company", 5, "ref"),
             ("company", 5, "url"),
-            ("data:image/svg", 10, "url"),
-            (".svg", 10, "url")
+            ("svg", 20, "url")
         ]
 
         if row["ref"]:
@@ -223,7 +223,7 @@ class Crawler:
         score = sum(
             points for keyword, points, field in scoring_criteria
             if row[field] is not None
-            and fuzz.partial_ratio(row[field].lower(), keyword) == 100
+            and fuzz.partial_ratio(row[field].lower(), keyword) >= 90
         )
         if (row["ref"] is None) or (row["ref"] == ""):
             score -= 10
@@ -233,7 +233,7 @@ class Crawler:
                 title_match = fuzz.partial_ratio(
                     row["ref"].lower(), title.strip())
                 if title_match >= 85:
-                    score += 45
+                    score += int(45 * title_match / 100)
                     break
 
         file_formats = self.formats + ("<svg", "data:")
@@ -282,7 +282,7 @@ class Crawler:
         self.times["tags"] = round(end - start, 3)
 
         if self.urls.empty:
-            return self.urls
+            return None
 
         start = time.time()
         self.urls = self.urls.drop_duplicates(subset=["ref", "url"])
@@ -291,6 +291,11 @@ class Crawler:
             by=["score", "score2"], ascending=False)
         end = time.time()
         self.times["process"] = round(end - start, 3)
+
+        if not self.debug:
+            self.urls = self.urls[self.urls["score"] > 10]
+        if self.urls.empty:
+            return None
 
         # Fix protocol-relative URLs
         self.urls['url'] = self.urls['url'].apply(
@@ -302,13 +307,13 @@ class Crawler:
             else f"https://{bare_url}" + x)
 
         # Check if links are alive
-        start = time.time()
-        self.urls = self.urls[self.urls['url'].apply(self.is_link_alive)]
-        end = time.time()
-        self.times["is_alive"] = round(end - start, 3)
+        # start = time.time()
+        # self.urls = self.urls[self.urls['url'].apply(self.is_link_alive)]
+        # end = time.time()
+        # self.times["is_alive"] = round(end - start, 3)
 
         if self.urls.empty:
-            return self.urls
+            return None
 
         self.urls = self.urls.drop(columns=["size"])
         self.urls = self.urls.reset_index(drop=True)

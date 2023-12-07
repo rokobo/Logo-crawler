@@ -115,12 +115,15 @@ class Crawler:
         img_tag = tag.find("img")
         if img_tag:
             alt2 = img_tag.get('alt')
+
+            # URL can be in multiple sources
             src = img_tag.get('src')
             data = img_tag.get('data-src')
             lazy = img_tag.get('data-lazy-src')
             url2 = next((
                 v for v in [src, data, lazy]
                 if v and (v.lower().endswith(self.formats))), None)
+
             if (not url2):
                 url2 = src or data or lazy
             if (not url2):
@@ -138,13 +141,10 @@ class Crawler:
                 "source": ["<a> <img>"], "size": [size]
             })])
 
-    def get_by_link(self, tag: Tag) -> None:
-        """Processes <link> tags.
-
-        Args:
-            tag (Tag): <link> tag object.
-        """
+    def get_by_link(self) -> None:
+        """Processes <link> tags."""
         file_formats = self.formats + ("<svg", "data:")
+
         for tag in self.soup.find_all('link'):
             rel = tag.get('rel')
             href = tag.get('href')
@@ -225,9 +225,10 @@ class Crawler:
             if row[field] is not None
             and fuzz.partial_ratio(row[field].lower(), keyword) >= 90
         )
+
         if (row["ref"] is None) or (row["ref"] == ""):
             score -= 10
-        else:
+        else:  # Match title
             titles = re.split(r"[\–\-\|\:]", self.title) + [self.title]
             for title in titles:
                 title_match = fuzz.partial_ratio(
@@ -262,12 +263,14 @@ class Crawler:
         self.bare_url = bare_url.lower()
         self.site_name = bare_url.split(".")[0]
         url = "http://" + bare_url
+
+        # Connect and get source code
         html = self.connect(url)
         if html is None:
             return None
-
         self.soup = BeautifulSoup(html, 'html.parser')
 
+        # Get tags
         start = time.time()
         for tag in self.soup.find_all(['a', 'img']):
             match tag.name:
@@ -276,14 +279,14 @@ class Crawler:
                 case "img":
                     self.get_by_img(tag)
 
-        for tag in self.soup.find_all('link'):
-            self.get_by_link(tag)
+        self.get_by_link()
         end = time.time()
         self.times["tags"] = round(end - start, 3)
 
         if self.urls.empty:
             return None
 
+        # Process tags
         start = time.time()
         self.urls = self.urls.drop_duplicates(subset=["ref", "url"])
         self.urls[["score", "score2"]] = self.urls.apply(self.process, axis=1)
@@ -292,6 +295,7 @@ class Crawler:
         end = time.time()
         self.times["process"] = round(end - start, 3)
 
+        # Remove bad tags
         if not self.debug:
             self.urls = self.urls[self.urls["score"] > 10]
         if self.urls.empty:

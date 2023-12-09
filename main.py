@@ -120,13 +120,14 @@ class Crawler:
             src = img_tag.get('src')
             data = img_tag.get('data-src')
             lazy = img_tag.get('data-lazy-src')
-            url2 = next((
-                v for v in [src, data, lazy]
-                if v and (v.lower().endswith(self.formats))), None)
 
-            if (not url2):
-                url2 = src or data or lazy
-            if (not url2):
+            if src and (src.lower().endswith(self.formats)):
+                url2 = src.lower()
+            elif data and (data.lower().endswith(self.formats)):
+                url2 = data.lower()
+            elif lazy and (lazy.lower().endswith(self.formats)):
+                url2 = lazy.lower()
+            else:
                 return
 
             height = img_tag.get('height') or 1
@@ -288,7 +289,7 @@ class Crawler:
 
         # Process tags
         start = time.time()
-        self.urls = self.urls.drop_duplicates(subset=["ref", "url"])
+        self.urls.drop_duplicates(subset=["ref", "url"], inplace=True)
         self.urls[["score", "score2"]] = self.urls.apply(self.process, axis=1)
         self.urls = self.urls.sort_values(
             by=["score", "score2"], ascending=False)

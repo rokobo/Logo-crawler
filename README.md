@@ -1,5 +1,9 @@
 # Logo crawler
 
+<p align="center">
+  <img src="https://github.com/rokobo/Logo-crawler/blob/main/thumbnail.png?raw=true"/>
+</p>
+
 This program accepts domain names on `STDIN` and writes a CSV of domain and logo URL to `STDOUT`. It is made to be used inside of a nix shell and uses multithreading for faster processing.
 
 ## Running the application

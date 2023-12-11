@@ -13,10 +13,10 @@ pkgs.mkShell rec {
         chromedriver
         chromium
         pypkgs.python
+        pypkgs.lxml
         pypkgs.selenium
         pypkgs.requests
         pypkgs.pandas
-        pypkgs.beautifulsoup4
         pypkgs.fuzzywuzzy
         pypkgs.ipython
         pypkgs.nose

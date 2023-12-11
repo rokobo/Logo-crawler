@@ -3,7 +3,8 @@ import sys
 import csv
 import re
 import time
-from multiprocessing import Pool, cpu_count
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from fuzzywuzzy import fuzz
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -14,25 +15,37 @@ from selenium.common.exceptions import (
 )
 from selenium.webdriver.chrome.options import Options
 import pandas as pd
-from bs4 import BeautifulSoup
-from bs4.element import Tag
 import requests
+from lxml import html
+
+
+logging.basicConfig(
+    filename='app.log',
+    filemode='a',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)-8s - %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 
 class Crawler:
     """Web crawler class for finding logo URL."""
-    def __init__(self, debug=False, log_errors=False):
+    def __init__(self, debug=False):
         self.urls = pd.DataFrame(
             columns=["website", "ref", "url", "source", "size"])
         self.formats = (
-            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp')
+            # Normal formats
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico',
+            # Data URL formats
+            '<svg', ';base64,'
+        )
         self.times = {}
         self.title = ""
-        self.soup = ""
+        self.tree = ""
         self.bare_url = ""
         self.site_name = ""
         self.debug = debug
-        self.log_errors = log_errors
+        self.logger = logging.getLogger('app')
 
     def connect(self, url: str) -> str:
         """Connect to URL and get page source code using selenium.
@@ -43,6 +56,7 @@ class Crawler:
         Returns:
             str: HTML code.
         """
+        self.logger.info("Connecting... %s", self.bare_url)
         start = time.time()
         chrome_options = Options()
         chrome_options.add_argument("--headless")
@@ -50,118 +64,84 @@ class Crawler:
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         driver = webdriver.Chrome(options=chrome_options)
-        driver.set_page_load_timeout(15)
+        driver.set_page_load_timeout(90)
+        page_html = None
 
-        for _ in range(2):
+        for _ in range(1):
             try:
                 driver.get(url)
-                html = driver.page_source
+                page_html = driver.page_source
                 self.title = driver.title.lower()
                 break
             except TimeoutException:
-                if self.log_errors:
-                    print("Timeout Error", file=sys.stderr)
-                time.sleep(15)
+                self.logger.error("Timeout %s", self.bare_url)
             except NoSuchElementException:
-                if self.log_errors:
-                    print("Element not found", file=sys.stderr)
+                self.logger.error("Element not found %s", self.bare_url)
             except ElementNotInteractableException:
-                if self.log_errors:
-                    print("Element not interactable", file=sys.stderr)
+                self.logger.error("Not interactable %s", self.bare_url)
             except WebDriverException:
-                if self.log_errors:
-                    print("Webdriver error", file=sys.stderr)
+                self.logger.error("Webdriver %s", self.bare_url)
             except Exception:
-                if self.log_errors:
-                    print("Unknown error", file=sys.stderr)
+                self.logger.error("Unknown %s", self.bare_url)
         else:
-            html = None
+            page_html = None
+            self.logger.warning("No HTML %s", self.bare_url)
             self.title = ""
+
+        if not self.title:
+            self.logger.info("Connected, no title %s", self.bare_url)
+        else:
+            self.logger.info("Connected %s", self.bare_url)
         driver.quit()
         end = time.time()
         self.times["connect"] = round(end - start, 3)
-        return html
+        return page_html
 
-    def get_by_img(self, tag: Tag) -> None:
-        """Processes <img> tags.
+    def get_by_img(self) -> None:
+        """Processes img tags."""
+        for img_tag in self.tree.xpath('//img'):
+            src = (img_tag.get('src') or "").lower()
+            data = (img_tag.get('data-src') or "").lower()
+            lazy = (img_tag.get('data-lazy-src') or "").lower()
 
-        Args:
-            tag (Tag): <img> tag object.
-        """
-        alt = tag.get('alt')
-        url = tag.get('src')
-
-        if (not url):
-            return
-
-        height = tag.get('height') or 1
-        width = tag.get('width') or 1
-        try:
-            size = int(float(height) * float(width))
-        except ValueError:
-            size = 1
-
-        self.urls = pd.concat([self.urls, pd.DataFrame({
-            "website": [self.bare_url], "ref": [alt], "url": [url],
-            "source": ["<img>"], "size": [size]
-        })])
-
-    def get_by_a(self, tag: Tag) -> None:
-        """Processes <a> tags.
-
-        Args:
-            tag (Tag): <a> tag object.
-        """
-        img_tag = tag.find("img")
-        if img_tag:
-            alt2 = img_tag.get('alt')
-
-            # URL can be in multiple sources
-            src = img_tag.get('src')
-            data = img_tag.get('data-src')
-            lazy = img_tag.get('data-lazy-src')
-
-            if src and (src.lower().endswith(self.formats)):
-                url2 = src.lower()
-            elif data and (data.lower().endswith(self.formats)):
-                url2 = data.lower()
-            elif lazy and (lazy.lower().endswith(self.formats)):
-                url2 = lazy.lower()
+            if src and any(f in src for f in self.formats):
+                url = src.lower()
+            elif data and any(f in data for f in self.formats):
+                url = data.lower()
+            elif lazy and any(f in lazy for f in self.formats):
+                url = lazy.lower()
             else:
-                return
-
-            height = img_tag.get('height') or 1
-            width = img_tag.get('width') or 1
-            try:
-                size = int(float(height) * float(width))
-            except ValueError:
-                size = 1
+                continue
+            alt = (img_tag.get("alt") or "").lower()
+            height = re.search(r"(\d+)", img_tag.get('height') or "1") or [1]
+            width = re.search(r"(\d+)", img_tag.get('width') or "1") or [1]
+            size = int(float(height[0]) * float(width[0]))
 
             self.urls = pd.concat([self.urls, pd.DataFrame({
-                "website": [self.bare_url], "ref": [alt2], "url": [url2],
-                "source": ["<a> <img>"], "size": [size]
+                "website": [self.bare_url], "ref": [alt], "url": [url],
+                "source": ["<img>"], "size": [size]
             })])
 
     def get_by_link(self) -> None:
         """Processes <link> tags."""
-        file_formats = self.formats + ("<svg", "data:")
+        for link_tag in self.tree.xpath('//link'):
+            href = (link_tag.get("href") or "").lower()
 
-        for tag in self.soup.find_all('link'):
-            rel = tag.get('rel')
-            href = tag.get('href')
-            size = tag.get('sizes') or "0"
+            if not href:
+                continue
+
+            if not any(f in href for f in self.formats):
+                continue
+
+            rel = (link_tag.get("rel")[0] or "").lower()
+            size = link_tag.get('sizes') or "1x1"
             size = re.findall(r"(\d+)x(\d+)", size) or [(1, 1)]
-            try:
-                size = int(float(size[0][0]) * float(size[0][1]))
-            except ValueError:
-                size = 1
+            size = int(float(size[0][0]) * float(size[0][1]))
 
-            if (rel is not None) and (href is not None):
-                if any(file_format in href for file_format in file_formats):
-                    self.urls = pd.concat([self.urls, pd.DataFrame({
-                        "website": [self.bare_url], "ref": [rel[0]],
-                        "url": [href], "source": ["<link>"], "size": [size]
-                    })])
+            self.urls = pd.concat([self.urls, pd.DataFrame({
+                "website": [self.bare_url], "ref": [rel],
+                "url": [href], "source": ["<link>"], "size": [size]
+            })])
 
     def is_link_alive(self, url: str) -> bool:
         """Checks if link is alive.
@@ -202,45 +182,48 @@ class Crawler:
             pd.Series: New score rows.
         """
         # Main score
-        scoring_criteria = [
-            ("logo", 10, "ref"),
+        fuzzy_criteria = [
+            ("header logo", 60, "url"),
             (self.site_name, 50, "ref"),
+            (self.bare_url, 20, "ref"),
+            ("main logo", 20, "url"),
+        ]
+        exact_criteria = [
+            (f"{self.site_name} logo", 100, "ref"),
+            ("logo", 10, "ref"),
+            ("header logo", 30, "ref"),
             ("logo", 10, "url"),
             ("official", 30, "ref"),
-            (self.site_name, 35, "url"),
-            (self.bare_url, 20, "ref"),
-            ("icon", 5, "ref"),
-            ("main", 2, "url"),
-            ("alt", 1, "source"),
+            ("icon", 15, "ref"),
             ("company", 5, "ref"),
             ("company", 5, "url"),
-            ("svg", 20, "url")
+            ("svg", 20, "url"),
+            (".ico", -100, "url"),
+            ("<link>", -35, "source")
         ]
 
-        if row["ref"]:
+        if row["ref"]:  # Improves word matching
             row = row.copy()
             row["ref"] = row["ref"].replace("-", "")
 
         score = sum(
-            points for keyword, points, field in scoring_criteria
-            if row[field] is not None
-            and fuzz.partial_ratio(row[field].lower(), keyword) >= 90
+            points for keyword, points, field in fuzzy_criteria
+            if len(row[field]) >= 3  # Single chars lead to errors
+            and fuzz.partial_ratio(row[field], keyword) >= 90
+        )
+        score += sum(
+            points for keyword, points, field in exact_criteria
+            if keyword in row[field]
         )
 
-        if (row["ref"] is None) or (row["ref"] == ""):
-            score -= 10
-        else:  # Match title
+        if len(row["ref"]) >= 3:
             titles = re.split(r"[\–\-\|\:]", self.title) + [self.title]
             for title in titles:
                 title_match = fuzz.partial_ratio(
-                    row["ref"].lower(), title.strip())
+                    row["ref"], title.strip())
                 if title_match >= 85:
                     score += int(45 * title_match / 100)
                     break
-
-        file_formats = self.formats + ("<svg", "data:")
-        if not any(file_format in row["url"] for file_format in file_formats):
-            score -= 100
 
         # Secondary score
         score2 = re.findall(r"(\d+)[x-](\d+)", row["url"]) or [(1, 1)]
@@ -266,20 +249,14 @@ class Crawler:
         url = "http://" + bare_url
 
         # Connect and get source code
-        html = self.connect(url)
-        if html is None:
+        page_html = self.connect(url)
+        if page_html is None:
             return None
-        self.soup = BeautifulSoup(html, 'html.parser')
+        self.tree = html.fromstring(page_html)
 
         # Get tags
         start = time.time()
-        for tag in self.soup.find_all(['a', 'img']):
-            match tag.name:
-                case "a":
-                    self.get_by_a(tag)
-                case "img":
-                    self.get_by_img(tag)
-
+        self.get_by_img()
         self.get_by_link()
         end = time.time()
         self.times["tags"] = round(end - start, 3)
@@ -343,12 +320,15 @@ def process_url(url: str) -> str:
 
 
 if __name__ == "__main__":
+    open('app.log', 'w').close()
     csv_writer = csv.writer(sys.stdout)
     domains = [
         domain.strip() for domain in sys.stdin.readline().strip().split()]
 
-    with Pool(processes=cpu_count() - 1) as pool:
-        results = pool.map(process_url, domains)
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = []
+        for future in executor.map(process_url, domains):
+            futures.append(future)
 
-    for domain, result in zip(domains, results):
-        csv_writer.writerow([domain, result])
+    for domain, future in zip(domains, futures):
+        csv_writer.writerow([domain, future])

@@ -1,3 +1,6 @@
 
 __pycache__/
 *.code-workspace
+app.log
+tuning.ipynb
+notes.md

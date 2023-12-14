@@ -2,7 +2,7 @@ site,url
 winegard.com,https://cdn11.bigcommerce.com/s-ltdyg0lu1n/images/stencil/250x63/winegard-logo_1631254366__84634.original.png
 allmyfaves.com,https://allmyfaves.com/amf_header_logo.png
 xcomglobal.com,https://xcomglobal.com/_layout/images/header_logo.svg
-luxsci.com,https://djrufvackyewl.cloudfront.net/s3/design2018/main-logo.png
+luxsci.com,https://djrufvackyewl.cloudfront.net/s3/design2018/logo.png
 superb.net,https://superb.net/images2/main/logo.png
 rtrk.com,https://live-proxy-site.pantheonsite.io/wp-content/uploads/2022/09/localiq_logo_black_notagline_186x35.svg
 siteground.com,https://siteground.com/img/apple-touch-icon.png
@@ -14,8 +14,8 @@ efaxcorporate.com,https://enterprise.efax.com/wp-content/themes/enterprise-efax-
 toptenreviews.com,https://vanilla.futurecdn.net/toptenreviews/media/img/missing-image.svg
 tinyurl.com,https://tinyurl.com/favicon.ico
 ivillage.com,https://cdn.cookielaw.org/logos/17e5cb00-ad90-47f5-a58d-77597d9d2c16/d44e374b-e570-4884-9441-33c0ccae5431/959d0f3c-d044-46db-bc43-cbca0284a92d/nbcu_logo.png
-toucharcade.com,https://toucharcade.com/apple-touch-icon-180x180.png
-vanillaforums.com,1https://vanilla.higherlogic.com/wp-content/uploads/2023/08/higherlogic_logo_stacked.png
+toucharcade.com,https://toucharcade.com/styles/toucharcade/toucharcade/logo.png
+vanillaforums.com,https://vanilla.higherlogic.com/wp-content/uploads/2023/08/higherlogic_logo_stacked.png
 starhub.com,https://starhub.com/etc/designs/starhub/clientlibs/revamp/img/sh-logo.svg
 onstar.com,https://onstar.com/content/dam/onstar/na/us/en/navigation/01-images/os-header-logo-shared.svg
 emarketer.com,https://emarketer.com/icons/icon-512x512.png?v=40814d1bf88a50c16def08ad125c668f
@@ -45,7 +45,7 @@ geotrust.com,https://geotrust.com/content/dam/geotrust/logo/geotrustlogo.svg
 inbox.com,https://inbox.com/_next/image?url=%2fimages%2flogo-white.png&w=640&q=75
 clickworker.com,https://d2v95urbopcvz7.cloudfront.net/wp-content/themes/clickworkerv7/assets-dist/img/logo/logo.png
 jangomail.com,https://jangomail.com/wp-content/uploads/2020/10/cropped-main-logo.png
-payloadz.com,https://payloadz.com/resources/images/logo_payloadz.png
+payloadz.com,https://payloadz.com/images/logo02.png
 telekom.com,https://telekom.com/resource/crblob/1021450/93333a9e7b5155e1f2a46d92d11394f1/favicon-svg-data.svg
 clear.com,https://mediaoptions.com/wp-content/themes/media-options-rebuld/assets/app/img/media-options-logo.png
 thrillist.com,https://cdn.cookielaw.org/logos/static/ot_company_logo.png
@@ -56,7 +56,7 @@ cwa-union.org,https://cwa-union.org/themes/custom/cwa_union/logo.svg
 indianic.com,https://dcdh7ea8gkhvt.cloudfront.net/wp-content/themes/indianic/assets/images/app-icon.png
 izea.com,https://izea.com/assets/appicons/icon-192x192-82050cd1a1efa6ce001d49107b3ecd4c01e43a1fab2f35f43d0a86e345fca902.png
 fb.com,https://static.xx.fbcdn.net/rsrc.php/y1/r/4lcu2zih0ca.svg
-entireweb.com,
+entireweb.com,https://entireweb.com/favicon.ico
 telestial.com,https://telestial.com/images/layout/logo.svg
 mxtoolbox.com,https://mxtoolbox.com/public/favicon/mx-logo-icon.svg
 tradedoubler.com,"https://sp-ao.shortpixel.ai/client/to_webp,q_glossy,ret_img/https://www.tradedoubler.com/wp-content/uploads/2023/01/logo.png"
@@ -75,7 +75,7 @@ telus.net,
 nokia.com,
 webimax.com,https://www.webimax.com/hs-fs/hubfs/1-webimax%20redesign%202018/webimax-logo.png?width=170&height=52&name=webimax-logo.png
 greatcall.com,
-3dcart.com,
+3dcart.com,https://3dcart.com/favicon.ico
 ooma.com,https://ooma.com/wp-content/themes/ooma/images/icons/ooma-logo.svg
 flipbuilder.com,https://flipbuilder.com/images/logo.png
 sailthru.com,https://sailthru.com/images/logos/mg-engage_by-st_stacked_white.png

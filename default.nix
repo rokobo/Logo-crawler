@@ -10,14 +10,18 @@ pkgs.mkShell rec {
         source .bashrc
     '';
     buildInputs = with pkgs; [
+        pypkgs.python
+        # Loading website html
         chromedriver
         chromium
-        pypkgs.python
-        pypkgs.lxml
         pypkgs.selenium
         pypkgs.requests
-        pypkgs.pandas
+        # Process website information
+        pypkgs.lxml
+        pypkgs.tldextract
         pypkgs.fuzzywuzzy
+        pypkgs.pandas
+        # Testing
         pypkgs.ipython
         pypkgs.nose
     ];

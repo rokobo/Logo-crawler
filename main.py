@@ -5,6 +5,7 @@ import re
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
+import tldextract
 from fuzzywuzzy import fuzz
 from selenium import webdriver
 from selenium.common.exceptions import (
@@ -46,6 +47,8 @@ class Crawler:
         self.site_name = ""
         self.debug = debug
         self.logger = logging.getLogger('app')
+        self.final_url = ""
+        self.domain = ""
 
     def connect(self, url: str) -> str:
         """Connect to URL and get page source code using selenium.
@@ -72,6 +75,7 @@ class Crawler:
                 driver.get(url)
                 page_html = driver.page_source
                 self.title = driver.title.lower()
+                self.final_url = driver.current_url
                 break
             except TimeoutException:
                 self.logger.error("Timeout %s", self.bare_url)
@@ -87,6 +91,7 @@ class Crawler:
             page_html = None
             self.logger.warning("No HTML %s", self.bare_url)
             self.title = ""
+            self.final_url = ""
 
         if not self.title:
             self.logger.info("Connected, no title %s", self.bare_url)
@@ -133,7 +138,8 @@ class Crawler:
             if not any(f in href for f in self.formats):
                 continue
 
-            rel = (link_tag.get("rel")[0] or "").lower()
+            rel = link_tag.get("rel") or ""
+            rel = rel[0].lower() if isinstance(rel, list) else rel.lower()
             size = link_tag.get('sizes') or "1x1"
             size = re.findall(r"(\d+)x(\d+)", size) or [(1, 1)]
             size = int(float(size[0][0]) * float(size[0][1]))
@@ -181,12 +187,25 @@ class Crawler:
         Returns:
             pd.Series: New score rows.
         """
+        # Secondary score
+        score2 = re.findall(r"(\d+)[x-](\d+)", row["url"]) or [(1, 1)]
+        score2 = int(float(score2[0][0]) * float(score2[0][1]))
+        score2 = max(score2, row["size"])
+
+        if "apple-touch-icon" in row["ref"]:
+            return pd.Series([31, score2])
+        if "favicon.ico" in row["url"]:
+            return pd.Series([30, score2])
+
         # Main score
         fuzzy_criteria = [
             ("header logo", 60, "url"),
+            ("footer logo", 30, "url"),
             (self.site_name, 50, "ref"),
             (self.bare_url, 20, "ref"),
-            ("main logo", 20, "url"),
+            (f"{self.site_name} logo", 50, "url"),
+            ("main logo", 10, "url"),
+            (self.domain, 50, "ref")
         ]
         exact_criteria = [
             (f"{self.site_name} logo", 100, "ref"),
@@ -198,8 +217,7 @@ class Crawler:
             ("company", 5, "ref"),
             ("company", 5, "url"),
             ("svg", 20, "url"),
-            (".ico", -100, "url"),
-            ("<link>", -35, "source")
+            ("<link>", -5, "source")
         ]
 
         if row["ref"]:  # Improves word matching
@@ -224,12 +242,6 @@ class Crawler:
                 if title_match >= 85:
                     score += int(45 * title_match / 100)
                     break
-
-        # Secondary score
-        score2 = re.findall(r"(\d+)[x-](\d+)", row["url"]) or [(1, 1)]
-        score2 = int(float(score2[0][0]) * float(score2[0][1]))
-        score2 = max(score2, row["size"])
-
         return pd.Series([score, score2])
 
     def crawl(self, bare_url: str) -> pd.DataFrame:
@@ -253,6 +265,7 @@ class Crawler:
         if page_html is None:
             return None
         self.tree = html.fromstring(page_html)
+        self.domain = tldextract.extract(self.final_url).domain
 
         # Get tags
         start = time.time()
@@ -262,6 +275,7 @@ class Crawler:
         self.times["tags"] = round(end - start, 3)
 
         if self.urls.empty:
+            self.logger.warning("No tags %s", self.bare_url)
             return None
 
         # Process tags
@@ -277,6 +291,7 @@ class Crawler:
         if not self.debug:
             self.urls = self.urls[self.urls["score"] > 10]
         if self.urls.empty:
+            self.logger.warning("Low score %s", self.bare_url)
             return None
 
         # Fix protocol-relative URLs
@@ -286,7 +301,7 @@ class Crawler:
         # Fix root-relative URLs and Data URLs
         self.urls['url'] = self.urls['url'].apply(
             lambda x: x if x.startswith('http') or x.startswith("data:")
-            else f"https://{bare_url}" + x)
+            else f"https://{bare_url}{'' if x.startswith('/') else '/'}" + x)
 
         # Check if links are alive
         # start = time.time()
@@ -305,7 +320,7 @@ class Crawler:
         return self.urls.iloc[0, 2]
 
 
-def process_url(url: str) -> str:
+def process_url(url: str, debug=False, title=False) -> str:
     """Function used by multiprocessing to get logo URL.
 
     Args:
@@ -314,8 +329,10 @@ def process_url(url: str) -> str:
     Returns:
         str: Logo URL.
     """
-    crawler = Crawler()
+    crawler = Crawler(debug)
     logo_url = crawler.crawl(url)
+    if title:
+        return logo_url, crawler.title, crawler.site_name, crawler.final_url
     return logo_url
 
 
@@ -325,7 +342,7 @@ if __name__ == "__main__":
     domains = [
         domain.strip() for domain in sys.stdin.readline().strip().split()]
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = []
         for future in executor.map(process_url, domains):
             futures.append(future)
